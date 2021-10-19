@@ -125,6 +125,15 @@ namespace Microsoft.Teams.Apps.CompanyCommunicator.Common.Services.AdaptiveCard
             {
                 string trul = trackingurl + "/?id=[ID]&key=[KEY]";
 
+                // Debug
+                card.Body.Add(new AdaptiveTextBlock()
+                {
+                    Text = trul,
+                    Size = AdaptiveTextSize.Small,
+                    Weight = AdaptiveTextWeight.Lighter,
+                    Wrap = true,
+                });
+
                 card.Body.Add(new AdaptiveImage()
                 {
                     Url = new Uri(trul, UriKind.RelativeOrAbsolute),
