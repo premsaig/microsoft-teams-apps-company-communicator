@@ -12,7 +12,7 @@ import Resizer from 'react-image-file-resizer';
 import Papa from "papaparse";
 import './newMessage.scss';
 import './teamTheme.scss';
-import { getDraftNotification, getTeams, createDraftNotification, updateDraftNotification, searchGroups, getGroups, verifyGroupAccess, getAppSettings, getChannelConfig } from '../../apis/messageListApi';
+import { getDraftNotification, getTeams, createDraftNotification, updateDraftNotification, searchGroups, getGroups, verifyGroupAccess, getAppSettings, getChannelConfig, getGroupAssociations } from '../../apis/messageListApi';
 import { getInitAdaptiveCard, setCardTitle, setCardImageLink, setCardSummary, setCardAuthor, setCardBtns, setCardTarget, setCardTargetImage, setCardTargetTitle } from '../AdaptiveCard/adaptiveCard';
 import { getBaseUrl } from '../../configVariables';
 import { ImageUtil } from '../../utility/imageutility';
@@ -468,6 +468,25 @@ class NewMessage extends React.Component<INewMessageProps, formState> {
         }
     }
 
+    private async setAuthorizedGroupItems() {
+        var resultListItems: any[] = [];
+
+        const response = await getGroupAssociations(this.state.channelId);
+        const inputGroups = response.data;
+
+        inputGroups.forEach((element) => {
+            resultListItems.push({
+                mail: element.groupEmail,
+                id: element.groupId,
+                name: element.groupName,
+            });
+        });
+
+        this.setState({
+            groups: resultListItems
+        });
+    }
+
     private getGroupItems() {
         if (this.state.groups) {
             return this.makeDropdownItems(this.state.groups);
@@ -606,6 +625,8 @@ class NewMessage extends React.Component<INewMessageProps, formState> {
     }
 
     public render(): JSX.Element {
+        var isMaster = this.isMasterAdmin(this.masterAdminUpns, this.state.userPrincipalName);
+
         if (this.state.loader) {
             return (
                 <div className="Loader">
@@ -722,6 +743,7 @@ class NewMessage extends React.Component<INewMessageProps, formState> {
                                                 {
                                                     name: "teams",
                                                     key: "teams",
+                                                    disabled: (this.targetingEnabled && !isMaster),
                                                     value: "teams",
                                                     label: this.localize("SendToGeneralChannel"),
                                                     children: (Component, { name, ...props }) => {
@@ -735,6 +757,7 @@ class NewMessage extends React.Component<INewMessageProps, formState> {
                                                                     multiple
                                                                     items={this.getItems()}
                                                                     value={this.state.selectedTeams}
+                                                                    disabled={(this.targetingEnabled && !isMaster)}
                                                                     onChange={this.onTeamsChange}
                                                                     noResultsMessage={this.localize("NoMatchMessage")}
                                                                 />
@@ -745,6 +768,7 @@ class NewMessage extends React.Component<INewMessageProps, formState> {
                                                 {
                                                     name: "rosters",
                                                     key: "rosters",
+                                                    disabled: (this.targetingEnabled && !isMaster),
                                                     value: "rosters",
                                                     label: this.localize("SendToRosters"),
                                                     children: (Component, { name, ...props }) => {
@@ -769,6 +793,7 @@ class NewMessage extends React.Component<INewMessageProps, formState> {
                                                 {
                                                     name: "allUsers",
                                                     key: "allUsers",
+                                                    disabled: (this.targetingEnabled && !isMaster),
                                                     value: "allUsers",
                                                     label: this.localize("SendToAllUsers"),
                                                     children: (Component, { name, ...props }) => {
@@ -790,41 +815,62 @@ class NewMessage extends React.Component<INewMessageProps, formState> {
                                                     value: "groups",
                                                     label: this.localize("SendToGroups"),
                                                     children: (Component, { name, ...props }) => {
-                                                        return (
-                                                            <Flex key={name} column>
-                                                                <Component {...props} />
-                                                                <div className={this.state.groupsOptionSelected && !this.state.groupAccess ? "" : "hide"}>
-                                                                    <div className="noteText">
-                                                                        <Text error content={this.localize("SendToGroupsPermissionNote")} />
+                                                        if (this.targetingEnabled && !isMaster) {
+                                                            this.setAuthorizedGroupItems();
+                                                            return (
+                                                                <Flex key={name} column>
+                                                                    <Component {...props} />
+                                                                    <Dropdown
+                                                                        className="hideToggle"
+                                                                        placeholder="Select groups from the authorized list"
+                                                                        multiple
+                                                                        items={this.getGroupItems()}
+                                                                        value={this.state.selectedGroups}
+                                                                        onChange={this.onGroupsChange}
+                                                                        noResultsMessage={this.state.noResultMessage}
+                                                                        unstable_pinned={this.state.unstablePinned}
+                                                                    />
+                                                                </Flex>
+                                                            )
+                                                        }
+                                                        else {
+                                                            return (
+                                                                <Flex key={name} column>
+                                                                    <Component {...props} />
+                                                                    <div className={this.state.groupsOptionSelected && !this.state.groupAccess ? "" : "hide"}>
+                                                                        <div className="noteText">
+                                                                            <Text error content={this.localize("SendToGroupsPermissionNote")} />
+                                                                        </div>
                                                                     </div>
-                                                                </div>
-                                                                <Dropdown
-                                                                    className="hideToggle"
-                                                                    hidden={!this.state.groupsOptionSelected || !this.state.groupAccess}
-                                                                    placeholder={this.localize("SendToGroupsPlaceHolder")}
-                                                                    search={this.onGroupSearch}
-                                                                    multiple
-                                                                    loading={this.state.loading}
-                                                                    loadingMessage={this.localize("LoadingText")}
-                                                                    items={this.getGroupItems()}
-                                                                    value={this.state.selectedGroups}
-                                                                    onSearchQueryChange={this.onGroupSearchQueryChange}
-                                                                    onChange={this.onGroupsChange}
-                                                                    noResultsMessage={this.state.noResultMessage}
-                                                                    unstable_pinned={this.state.unstablePinned}
-                                                                />
-                                                                <div className={this.state.groupsOptionSelected && this.state.groupAccess ? "" : "hide"}>
-                                                                    <div className="noteText">
-                                                                        <Text error content={this.localize("SendToGroupsNote")} />
+                                                                    <Dropdown
+                                                                        className="hideToggle"
+                                                                        hidden={!this.state.groupsOptionSelected || !this.state.groupAccess}
+                                                                        placeholder={this.localize("SendToGroupsPlaceHolder")}
+                                                                        search={this.onGroupSearch}
+                                                                        multiple
+                                                                        loading={this.state.loading}
+                                                                        loadingMessage={this.localize("LoadingText")}
+                                                                        items={this.getGroupItems()}
+                                                                        value={this.state.selectedGroups}
+                                                                        onSearchQueryChange={this.onGroupSearchQueryChange}
+                                                                        onChange={this.onGroupsChange}
+                                                                        noResultsMessage={this.state.noResultMessage}
+                                                                        unstable_pinned={this.state.unstablePinned}
+                                                                    />
+                                                                    <div className={this.state.groupsOptionSelected && this.state.groupAccess ? "" : "hide"}>
+                                                                        <div className="noteText">
+                                                                            <Text error content={this.localize("SendToGroupsNote")} />
+                                                                        </div>
                                                                     </div>
-                                                                </div>
-                                                            </Flex>
-                                                        )
+                                                                </Flex>
+                                                            )
+                                                        }
                                                     },
                                                 },
                                                 {
                                                     name: "csv",
                                                     key: "csv",
+                                                    disabled: (this.targetingEnabled && !isMaster),
                                                     value: "csv",
                                                     label: this.localize("SendToCSV"),
                                                     children: (Component, { name, ...props }) => {
